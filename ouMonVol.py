@@ -1,5 +1,5 @@
 # program for simulating flights cancellation, Monte-Carlo method
-# Version Final-20220428
+# Version Final-20220429
 # Author: Kirk0830
 # Github: https://github.com/kirk0830/
 # Github pages: https://kirk0830.github.io/
@@ -15,7 +15,7 @@
 AVE = 5
 DEV = 2
 DAMP = 1.0
-NITER = 20000
+NITER = 10000
 SPAN = 12
 rand_dist = 'norm'
 # =======================================
@@ -25,7 +25,7 @@ rand_dist = 'norm'
 # L_TKTS：如果手中已经有一定数量的机票，可以打开这一标签，并在数组tks中指定周数
 #         例如若持有第一周，第三周机票，则tks = [0, 2]
 L_CORR = False
-L_SENS = False
+L_SENS = True
 L_TKTS = True
 # =======================================
 # 3. Preconditions（模拟条件初始化）
@@ -33,8 +33,12 @@ L_TKTS = True
 # csprecdx：给定一些周已经公布的确诊人数，如果两周并不连续，之间的周用-1占位，如
 #           第一、三周分别是5, 7，则设置csprecdx = [5, -1, 7]
 # week1, 2, 3：设置熔断后前三班稳飞
-tks = [6, 7, 8, 9]
-csprecdx = []
+# 当前预设条件：南航
+# 1. 确诊人数，4.14确诊人数6，4.21确诊人数7
+# 2. 购票，第八周6.9，第十周6.23
+# 3. 起飞初始条件，第一周、第二周、第三周即4.14，4.21，4.28均起飞
+tks = [9, 11]
+csprecdx = [6, 7]
 week1 = True
 week2 = True
 week3 = True
@@ -43,7 +47,7 @@ week3 = True
 # GRAPH：利用matplotlib扩展包进行绘图，注意，如果L_CORR为True，则此标签只能控制
 #        起飞概率的画图与否
 # SAVE_FILE：是否将结果输出为txt文档
-GRAPH = True
+GRAPH = False
 SAVE_FILE = False
 # =======================================
 
@@ -174,6 +178,21 @@ def sens(entity1, entity2, pertur, dm = 0):
         return [round((entity1[i] - entity2[i])/pertur, ndigits=4) for i in range(len(entity1))]
     elif dm == 2:
         return [[round((entity1[i][j] - entity2[i][j])/pertur, ndigits=4) for i in range(len(entity1))] for j in range(len(entity1))]
+import matplotlib.pyplot as plt
+def graph_out(data, dm, title, color):
+
+    if dm==2:
+        plt.figure()
+        plt.imshow(data, origin='lower',cmap=color)
+        plt.colorbar()
+        plt.title(title)
+    elif dm==1:
+        _lweek = ['week '+str(iweek) for iweek in range(SPAN)]
+        plt.figure(figsize=(10,4))
+        plt.bar(x = _lweek, height = data, color=color)
+        plt.title(title)
+    elif dm < 0:
+        plt.show()
 
 def main():
 
@@ -186,23 +205,14 @@ def main():
             sens(entity1=p0, entity2=pL, pertur=0.25, dm=1)
         ]
         if L_CORR:
-            import matplotlib.pyplot as plt
-            plt.figure()
-            plt.imshow(p0_corrmat, origin='lower', cmap='RdGy')
-            plt.colorbar()
-            plt.title('Correlation analysis between flights in SPAN range')
             s_corr = [
                 sens(entity1=pR_corrmat, entity2=p0_corrmat, pertur=0.25, dm=2),
                 sens(entity1=p0_corrmat, entity2=pL_corrmat, pertur=0.25, dm=2)
                 ]
-            plt.figure()
-            plt.imshow(s_corr[0], origin='lower', cmap='RdGy')
-            plt.colorbar()
-            plt.title('Correlation sensitivity analysis, RIGHT derivatives')
-            plt.figure()
-            plt.imshow(s_corr[1], origin='lower', cmap='RdGy')
-            plt.colorbar()
-            plt.title('Correlation sensitivity analysis, LEFT derivatives')
+            graph_out(p0_corrmat, 2, 'Correlation analysis between flights in SPAN range', 'RdGy')
+            graph_out(s_corr[0], 2, 'Correlation sensitivity analysis, RIGHT derivatives', 'RdGy')
+            graph_out(s_corr[1], 2, 'Correlation sensitivity analysis, LEFT derivatives', 'RdGy')
+
             if L_TKTS:
                 s_tickets = [
                     sens(entity1=pR_tickets, entity2=p0_tickets, pertur=0.25, dm=0),
@@ -212,16 +222,12 @@ def main():
                 print('Derivative right: '+str(s_tickets[0]))
                 print('Derivative left:  '+str(s_tickets[1]))
                 if GRAPH:
-                    _lweek = ['week '+str(iweek) for iweek in range(SPAN)]
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = p0)
-                    plt.title('Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP))
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = s_p[0])
-                    plt.title('Probabilities sensitivity analysis, RIGHT derivatives')
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = s_p[1])
-                    plt.title('Probabilities sensitivity analysis, LEFT derivatives')
+                    title0 = 'Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP)
+                    graph_out(p0, 1, title0, color='blue')
+                    title1 = 'Probabilities sensitivity analysis, RIGHT derivatives'
+                    title2 = 'Probabilities sensitivity analysis, LEFT derivatives'
+                    graph_out(s_p[0], 1, title1, color='orange')
+                    graph_out(s_p[1], 1, title2, color='orange')
                 if SAVE_FILE:
                     from time import asctime
                     with open(file = asctime().replace(' ','-').replace(':','')+'.txt', mode = 'a+', encoding = 'utf-8') as f:
@@ -250,20 +256,16 @@ def main():
                             f.writelines(strwrite+'\n')
                         f.writelines('SECTION| Probabilities and derivatives of successfully taking off with all tickets in hands\n')
                         f.writelines(str(p0_tickets)+' '+str(s_tickets[0])+' '+str(s_tickets[1])+'\n')
-                plt.show()
+                graph_out([],-1,'','')
                 return p0, p0_corrmat, p0_tickets, s_p, s_corr, s_tickets
             else:
                 if GRAPH:
-                    _lweek = ['week '+str(iweek) for iweek in range(SPAN)]
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = p0)
-                    plt.title('Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP))
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = s_p[0])
-                    plt.title('Probabilities sensitivity analysis, RIGHT derivatives')
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = s_p[1])
-                    plt.title('Probabilities sensitivity analysis, LEFT derivatives')
+                    title0 = 'Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP)
+                    graph_out(p0, 1, title0, color='blue')
+                    title1 = 'Probabilities sensitivity analysis, RIGHT derivatives'
+                    title2 = 'Probabilities sensitivity analysis, LEFT derivatives'
+                    graph_out(s_p[0], 1, title1, color='orange')
+                    graph_out(s_p[1], 1, title2, color='orange')
                 if SAVE_FILE:
                     from time import asctime
                     with open(file = asctime().replace(' ','-').replace(':','')+'.txt', mode = 'a+', encoding = 'utf-8') as f:
@@ -290,7 +292,7 @@ def main():
                             for jdx_p_corrmat in range(SPAN):
                                 strwrite += str(s_corr[1][idx_p_corrmat][jdx_p_corrmat])+' '
                             f.writelines(strwrite+'\n')
-                plt.show()
+                graph_out([],-1,'','')
                 return p0, p0_corrmat, s_p, s_corr
         else:
             if L_TKTS:
@@ -302,18 +304,13 @@ def main():
                 print('Derivative right: '+str(s_tickets[0]))
                 print('Derivative left:  '+str(s_tickets[1]))
                 if GRAPH:
-                    import matplotlib.pyplot as plt
-                    _lweek = ['week '+str(iweek) for iweek in range(SPAN)]
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = p0)
-                    plt.title('Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP))
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = s_p[0])
-                    plt.title('Probabilities sensitivity analysis, RIGHT derivatives')
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = s_p[1])
-                    plt.title('Probabilities sensitivity analysis, LEFT derivatives')
-                    plt.show()
+                    title0 = 'Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP)
+                    graph_out(p0, 1, title0, color='blue')
+                    title1 = 'Probabilities sensitivity analysis, RIGHT derivatives'
+                    title2 = 'Probabilities sensitivity analysis, LEFT derivatives'
+                    graph_out(s_p[0], 1, title1, color='orange')
+                    graph_out(s_p[1], 1, title2, color='orange')
+                    graph_out([],-1,'','')
                 if SAVE_FILE:
                     from time import asctime
                     with open(file = asctime().replace(' ','-').replace(':','')+'.txt', mode = 'a+', encoding = 'utf-8') as f:
@@ -326,18 +323,13 @@ def main():
                 return p0, p0_tickets, s_p, s_tickets
             else:
                 if GRAPH:
-                    import matplotlib.pyplot as plt
-                    _lweek = ['week '+str(iweek) for iweek in range(SPAN)]
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = p0)
-                    plt.title('Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP))
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = s_p[0])
-                    plt.title('Probabilities sensitivity analysis, RIGHT derivatives')
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = s_p[1])
-                    plt.title('Probabilities sensitivity analysis, LEFT derivatives')
-                    plt.show()
+                    title0 = 'Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP)
+                    graph_out(p0, 1, title0, color='blue')
+                    title1 = 'Probabilities sensitivity analysis, RIGHT derivatives'
+                    title2 = 'Probabilities sensitivity analysis, LEFT derivatives'
+                    graph_out(s_p[0], 1, title1, color='orange')
+                    graph_out(s_p[1], 1, title2, color='orange')
+                    graph_out([],-1,'','')
                 if SAVE_FILE:
                     from time import asctime
                     with open(file = asctime().replace(' ','-').replace(':','')+'.txt', mode = 'a+', encoding = 'utf-8') as f:
@@ -348,18 +340,12 @@ def main():
                 return p0, s_p
     else:
         if L_CORR:
-            import matplotlib.pyplot as plt
-            plt.figure()
-            plt.imshow(p0_corrmat, origin='lower', cmap='RdGy')
-            plt.colorbar()
-            plt.title('Correlation analysis between flights in SPAN range')
+            graph_out(p0_corrmat, 2, 'Correlation analysis between flights in SPAN range', 'RdGy')
             if L_TKTS:
                 print('Probabilities of successfully taking off with all tickets in hands: '+str(p0_tickets))
                 if GRAPH:
-                    _lweek = ['week '+str(iweek) for iweek in range(SPAN)]
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = p0)
-                    plt.title('Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP))
+                    title0 = 'Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP)
+                    graph_out(p0, 1, title0, color='blue')
                 if SAVE_FILE:
                     from time import asctime
                     with open(file = asctime().replace(' ','-').replace(':','')+'.txt', mode = 'a+', encoding = 'utf-8') as f:
@@ -374,15 +360,12 @@ def main():
                             f.writelines(strwrite+'\n')
                         f.writelines('SECTION| Probabilities of successfully taking off with all tickets in hands\n')
                         f.writelines(str(p0_tickets)+'\n')
-                plt.show()
+                graph_out([],-1,'','')
                 return p0, p0_corrmat, p0_tickets
             else:
                 if GRAPH:
-                    import matplotlib.pyplot as plt
-                    _lweek = ['week '+str(iweek) for iweek in range(SPAN)]
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = p0)
-                    plt.title('Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP))
+                    title0 = 'Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP)
+                    graph_out(p0, 1, title0, color='blue')
                 if SAVE_FILE:
                     from time import asctime
                     with open(file = asctime().replace(' ','-').replace(':','')+'.txt', mode = 'a+', encoding = 'utf-8') as f:
@@ -395,18 +378,15 @@ def main():
                             for jdx_p_corrmat in range(SPAN):
                                 strwrite += str(p0_corrmat[idx_p_corrmat][jdx_p_corrmat])+' '
                             f.writelines(strwrite+'\n')
-                plt.show()
+                graph_out([],-1,'','')
                 return p0, p0_corrmat
         else:
             if L_TKTS:
                 print('Probabilities of successfully taking off with all tickets in hands: '+str(p0_tickets))
                 if GRAPH:
-                    import matplotlib.pyplot as plt
-                    _lweek = ['week '+str(iweek) for iweek in range(SPAN)]
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = p0)
-                    plt.title('Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP))
-                    plt.show()
+                    title0 = 'Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP)
+                    graph_out(p0, 1, title0, color='blue')
+                    graph_out([],-1,'','')
                 if SAVE_FILE:
                     from time import asctime
                     with open(file = asctime().replace(' ','-').replace(':','')+'.txt', mode = 'a+', encoding = 'utf-8') as f:
@@ -418,12 +398,9 @@ def main():
                 return p0, p0_tickets
             else:
                 if GRAPH:
-                    import matplotlib.pyplot as plt
-                    _lweek = ['week '+str(iweek) for iweek in range(SPAN)]
-                    plt.figure(figsize=(10,4))
-                    plt.bar(x = _lweek, height = p0)
-                    plt.title('Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP))
-                    plt.show()
+                    title0 = 'Probabilities for flights setting off, with average positive cases: '+str(AVE)+', DAMP = '+str(DAMP)
+                    graph_out(p0, 1, title0, color='blue')
+                    graph_out([],-1,'','')
                 if SAVE_FILE:
                     from time import asctime
                     with open(file = asctime().replace(' ','-').replace(':','')+'.txt', mode = 'a+', encoding = 'utf-8') as f:
